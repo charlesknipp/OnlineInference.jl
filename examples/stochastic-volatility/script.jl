@@ -1,4 +1,5 @@
 using AbstractMCMC
+using Bijectors
 using CSV
 using DataFrames
 using Distributions
@@ -8,6 +9,7 @@ using OnlineInference
 using PDMats
 using Random
 using SSMProblems
+using StatsBase
 using StaticArrays
 
 #= NOTE: most of these dependencies are in favor of speed; for example, the StaticMvNormal
@@ -61,7 +63,7 @@ function UCSV(γ::T) where {T<:Real}
     )
 
     stoch_vol_process = GF.HomogeneousLinearGaussianLatentDynamics(
-        SMatrix{2,2,T}(I), zeros(SVector{2,T}), PDMat(exp(γ) * SMatrix{2,2,T}(I))
+        SMatrix{2,2,T}(I), zeros(SVector{2,T}), PDMat(γ * SMatrix{2,2,T}(I))
     )
 
     local_level_model = StateSpaceModel(
@@ -75,12 +77,14 @@ end
 
 ## MAIN ####################################################################################
 
-prior = MvNormal(1.0I(1))
-fred_data = CSV.read("examples/trend-inflation/data.csv", DataFrame)
+prior = MvLogNormal(1.0I(1))
+fred_data = CSV.read("examples/stochastic-volatility/data.csv", DataFrame)
 infl_data = [[val] for val in fred_data.value]
 
 # run SMC² with a Rao-Blackwellised particle filter and multithreaded PMMH rejuvenation
 rng = MersenneTwister(1234)
-smc = SMC(500, ESSResampler(0.6), PMMH(10), RBPF(BF(2^12), KF()))
+smc = SMC(100, ESSResampler(0.6), PMMH(10), RBPF(BF(2^12), KF()))
 sample = run_smc(rng, x -> UCSV(only(x)), prior, smc, infl_data; ensemble=MCMCThreads());
-vcat(map(x -> exp.(x.state.params), sample.particles)...)
+
+# return the weighted mean of the sample
+mean(sample)
