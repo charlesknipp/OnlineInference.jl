@@ -10,10 +10,16 @@ using Random
 using SSMProblems
 using StaticArrays
 
+#= NOTE: most of these dependencies are in favor of speed; for example, the StaticMvNormal
+is something that belongs in an extension. I can also reexport things like MCMCThreads() if
+I also plan on doing multithreaded propagation.
+=#
+
 const GF = GeneralisedFilters
 
 ## STATIC ARRAY UTILITIES ##################################################################
 
+# while not necessary, it speeds up sampling static arrays in nonlinear states
 const StaticMvNormal{N,T} = MvNormal{T,PDMat{T,MT},VT} where {
     N,T,MT<:StaticMatrix{N,N,T},VT<:StaticVector{N,T}
 }
@@ -26,7 +32,7 @@ end
 
 # this should singlehandedly fix sampling from Static MvNormal
 function Random.rand(rng::AbstractRNG, d::StaticMvNormal{N,T}) where {N,T<:Real}
-    return d.μ + PDMats.unwhiten(d.Σ, SVector{N,T}(randn(rng, N)))
+    return d.μ + PDMats.unwhiten(d.Σ, (@SVector randn(rng, N)))
 end
 
 ## LATENT DYNAMICS #########################################################################
@@ -51,7 +57,7 @@ end
 
 function UCSV(γ::T) where {T<:Real}
     stoch_vol_prior = GF.HomogeneousGaussianPrior(
-        zeros(SVector{2,T}), Distributions.PDMat(10 * SMatrix{2,2,T}(I))
+        zeros(SVector{2,T}), PDMat(10 * SMatrix{2,2,T}(I))
     )
 
     stoch_vol_process = GF.HomogeneousLinearGaussianLatentDynamics(
@@ -73,8 +79,8 @@ prior = MvNormal(1.0I(1))
 fred_data = CSV.read("examples/trend-inflation/data.csv", DataFrame)
 infl_data = [[val] for val in fred_data.value]
 
-# run SMC² with a Rao-Blackwellised particle filter
+# run SMC² with a Rao-Blackwellised particle filter and multithreaded PMMH rejuvenation
 rng = MersenneTwister(1234)
-smc = SMC(100, ESSResampler(0.6), PMMH(10), RBPF(BF(2^12), KF()))
-states = run_smc(rng, x -> UCSV(only(x)), prior, smc, infl_data; ensemble=MCMCThreads())
-vcat(map(x -> x.state.params, states.particles)...)
+smc = SMC(500, ESSResampler(0.6), PMMH(10), RBPF(BF(2^12), KF()))
+sample = run_smc(rng, x -> UCSV(only(x)), prior, smc, infl_data; ensemble=MCMCThreads());
+vcat(map(x -> exp.(x.state.params), sample.particles)...)
