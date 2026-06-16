@@ -29,7 +29,7 @@ function rejuvenate(
 )
     sampler = adapt(kernel.sampler, state)
     N = kernel.num_chains
-    initial_params = map(x -> x.state.params, state.particles)
+    initial_params = map(x -> link(prior(logdensity), x.state.params), state.particles)
     chains = @suppress_err AbstractMCMC.sample(
         rng, logdensity, sampler, ensemble, N, length(state); initial_params, kwargs...
     )
@@ -45,7 +45,7 @@ PMMH(num_chains::Int) = PMCMCKernel(RandomWalkKernel(), num_chains)
 
 function adapt(::RandomWalkKernel, state)
     parameters = hcat(map(x -> x.state.params, state.particles)...)
-    scale = 2.38 / size(parameters, 1)
+    scale = (2.38 ^ 2) / size(parameters, 1)
     Σ = cov(parameters, StatsBase.weights(state), 2)
     scaled_Σ = if isposdef(Σ)
         scale * Σ
