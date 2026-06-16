@@ -62,9 +62,10 @@ unpack(state::ModelState) = (state.model, state.params, state.sample)
 
 function reinitialise(parameters, p::StateSpaceLogDensity; kwargs...)
     particles = map(parameters) do θ
+        logprior = logpdf(prior(p), θ)
         model = p.build(θ)
-        states, log_weight = GeneralisedFilters.filter(model, p.algo, p.data; kwargs...)
-        Particle(ModelState(model, θ, states), log_weight, 0)
+        states, logweight = GeneralisedFilters.filter(model, p.algo, p.data; kwargs...)
+        Particle(ModelState(model, θ, states), logweight + logprior, 0)
     end
     return ParticleDistribution(particles, TypelessZero())
 end

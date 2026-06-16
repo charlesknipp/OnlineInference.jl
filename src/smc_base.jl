@@ -22,7 +22,8 @@ function smc_initialise(rng::AbstractRNG, logdensity::StateSpaceLogDensity, algo
         parameter = rand(rng, prior(logdensity))
         model = logdensity.build(parameter)
         states = GeneralisedFilters.initialise(rng, SSMProblems.prior(model), algo.filter; kwargs...)
-        Particle(ModelState(model, parameter, states), 0)
+        logprior = logpdf(prior(logdensity), parameter)
+        Particle(ModelState(model, parameter, states), logprior, 0)
     end
     return ParticleDistribution(particles, TypelessZero())
 end
