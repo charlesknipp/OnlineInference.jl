@@ -16,7 +16,7 @@ end
 
 struct PMCMCKernel{KT<:AbstractMCMC.AbstractSampler} <: AbstractMove
     sampler::KT
-    num_chains::Int
+    chain_length::Int
 end
 
 function rejuvenate(
@@ -28,7 +28,7 @@ function rejuvenate(
     kwargs...
 )
     sampler = adapt(kernel.sampler, state)
-    N = kernel.num_chains
+    N = kernel.chain_length
     initial_params = map(x -> link(prior(logdensity), x.state.params), state.particles)
     chains = @suppress_err AbstractMCMC.sample(
         rng, logdensity, sampler, ensemble, N, length(state); initial_params, kwargs...
@@ -41,7 +41,7 @@ end
 # should this be a subtype of AbstractSampler?
 struct RandomWalkKernel <: AbstractMCMC.AbstractSampler end
 
-PMMH(num_chains::Int) = PMCMCKernel(RandomWalkKernel(), num_chains)
+PMMH(chain_length::Int) = PMCMCKernel(RandomWalkKernel(), chain_length)
 
 function adapt(::RandomWalkKernel, state)
     parameters = hcat(map(x -> x.state.params, state.particles)...)
