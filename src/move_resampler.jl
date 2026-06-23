@@ -57,7 +57,7 @@ end
 
 # I think this could generalize a bit better
 function repackage(
-    chains::AbstractVector{<:AbstractVector{T}}, ssmprob::StateSpaceLogDensity; kwargs...
+    chains::AbstractVector{<:AbstractVector{T}}, ssmprob; kwargs...
 ) where {T<:AdvancedMH.Transition}
     return reinitialise(map(x -> x[end].params, chains), ssmprob; kwargs...)
 end
@@ -86,7 +86,7 @@ function GeneralisedFilters.maybe_resample(
     weights=GeneralisedFilters.get_weights(state);
     kwargs...
 )
-    ess_tracker = @sprintf("t = %4d\tess = %7.2f", lastindex(algo.problem.data), ess(weights))
+    ess_tracker = @sprintf("t = %4d\tess = %7.2f", get_iter(algo.problem), ess(weights))
     print("\r" * ess_tracker)
     if GeneralisedFilters.will_resample(algo.resampler, state, weights)
         println("\t(resampling)")

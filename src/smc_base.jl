@@ -75,8 +75,55 @@ function run_smc(rng::AbstractRNG, build, prior, algo::SMC, observations; kwargs
     init_state = smc_initialise(rng, ssm_logdensity, algo)
 
     state = smc_iter(rng, ssm_logdensity, algo, 1, init_state, observations[1]; kwargs...)
-    for t in 2:length(observations)
+    for t in 2:lastindex(observations)
         state = smc_iter(rng, ssm_logdensity, algo, t, state, observations[t]; kwargs...)
     end
     return state
+end
+
+## TEMPERED SMC ############################################################################
+
+minimum_ess(algo::SMC) = algo.resampler.threshold * algo.N
+
+function batch_tempered_smc(
+    rng::AbstractRNG, build, prior, algo::SMC, batch; kwargs...
+)
+    ssm_logdensity = StateSpaceLogDensity(build, algo.filter, prior, batch)
+    parameters = [link(prior, rand(rng, prior)) for _ in 1:algo.N]
+    particles = OnlineInference.reinitialise(parameters, ssm_logdensity)
+
+    ξ = 0.0
+
+    while ξ < 1.0
+        lower_bound = ξ
+        upper_bound = 2.0
+        local newξ
+
+        while (upper_bound - lower_bound) > 1.e-10
+            newξ = 0.5 * (upper_bound + lower_bound)
+            weights = softmax(newξ * GeneralisedFilters.log_weights(particles))
+
+            if ess(weights) == minimum_ess(algo)
+                break
+            elseif ess(weights) < minimum_ess(algo)
+                upper_bound = newξ
+            else
+                lower_bound = newξ
+            end
+        end
+
+        ξ = min(newξ, 1.0)
+        weights = softmax(ξ * GeneralisedFilters.log_weights(particles))
+        @printf("ξ = %1.4f\tess = %7.2f\n", ξ, ess(weights))
+
+        if newξ ≥ 1.0
+            break
+        end
+
+        tempered_ssm = TemperedLogDensity(ξ, ssm_logdensity)
+        prop_state = GeneralisedFilters.resample(rng, algo.resampler, particles, weights)
+        particles = rejuvenate(rng, tempered_ssm, algo.kernel, prop_state; kwargs...)
+    end
+
+    return particles
 end
