@@ -16,7 +16,11 @@ using StaticArrays
 const GF = GeneralisedFilters
 
 #= NOTE: my abuse of StaticArrays is quite gross. Presumably this will no longer be an issue
-once the closure interface gets merged into SSMProblems/GeneralisedFilters
+once the closure interface gets merged into SSMProblems/GeneralisedFilters.
+
+This example is also relatively unstable. It requires a much lower ESS threshold for SMC². I
+could get around this by implementing a tempered SMC algorithm for the first 50 observations
+to "jump start" estimation like I do in our paper.
 =#
 
 ## STATIC ARRAY UTILITIES ##################################################################
@@ -45,7 +49,7 @@ function stochastic_cyle(n::Integer, ρ::Real, λ::Real)
     ϕ = kron(I(n), ρ * [cosλ sinλ; -sinλ cosλ])
     ϕ += kron(diagm(1 => ones(n - 1)), I(2))
 
-    return SMatrix{2 * n, 2 * n}(ϕ)
+    return SMatrix{2 * n,2 * n}(ϕ)
 end
 
 function stochastic_trend(m::Integer)
@@ -70,7 +74,7 @@ function GF.calc_Q(cycle::TrendCycleDynamics{ΦT}, ::Integer; kwargs...) where {
     Σ = cat(
         Diagonal([zeros(cycle.m - 1); cycle.σζ²]),
         kron(Diagonal([zeros(cycle.n - 1); 1]), cycle.σκ² * I(2));
-        dims = (1, 2)
+        dims=(1, 2)
     )
     N = cycle.m + 2 * cycle.n
     return SMatrix{N,N}(Σ)
@@ -86,7 +90,7 @@ end
 
 function GF.calc_H(obs::TrendObservation, ::Integer; kwargs...)
     m, n = obs.m, obs.n
-    return SMatrix{1,2*n+m}([(i == 1) | (i == m + 1) for _ = 1:1, i = 1:(2 * n + m)])
+    return SMatrix{1,2 * n + m}([(i == 1) | (i == m + 1) for _ = 1:1, i = 1:(2*n+m)])
 end
 
 GF.calc_c(::TrendObservation, ::Integer; kwargs...) = zeros(SVector{1})
@@ -100,17 +104,22 @@ end
 function trend_cycle_model(
     n::Int64, m::Int64, ρ::Real, λ::Real, σκ²::Real, σζ²::Real, σε²::Real, init_state::Real
 )
+    # transition matrices
     ϕ1 = stochastic_trend(m)
     ϕ2 = stochastic_cyle(n, ρ, λ)
 
+    # state dimension
+    N = m + 2 * n
+
+    # solve for optimal initial covariance via a lyapunov equation
     Σϕ = kron(Diagonal([zeros(n - 1); σζ²]), σκ² * I(2))
-    Σ0 = SMatrix{m+2*n,m+2*n}(cat(1000I(m), lyapd(ϕ2, Σϕ), dims=(1, 2)))
+    Σ0 = SMatrix{N,N}(cat(1000I(m), lyapd(ϕ2, Σϕ), dims=(1, 2)))
 
     return StateSpaceModel(
         GF.HomogeneousGaussianPrior(
-            SVector{m+2*n}([init_state; zeros(m - 1 + 2 * n)]), PDMat(Σ0)
+            SVector{N}([init_state; zeros(m - 1 + 2 * n)]), PDMat(Σ0)
         ),
-        TrendCycleDynamics(m, n, SMatrix{m+2*n,m+2*n}(cat(ϕ1, ϕ2, dims=(1, 2))), σζ², σκ²),
+        TrendCycleDynamics(m, n, SMatrix{N,N}(cat(ϕ1, ϕ2, dims=(1, 2))), σζ², σκ²),
         TrendObservation(m, n, σε²)
     )
 end
@@ -122,10 +131,11 @@ end
 
 model_builder(θ) = trend_cycle_model(2, 2, θ[1], θ[2], θ[3], θ[4], θ[5], 816.542)
 
-# TODO: see why this is no good in higher dimensions
+## MAIN ####################################################################################
+
 prior = product_distribution([
     Uniform(0.01, 0.99),
-    beta_prior(2π/20, 0.001),
+    beta_prior(2π / 20, 0.001),
     LogNormal(),
     LogNormal(),
     LogNormal()
@@ -137,7 +147,7 @@ gdp_data = [[val] for val in fred_data.gdp]
 # run SMC² with a Kalman filter and multithreaded PMMH rejuvenation
 rng = MersenneTwister(1234)
 smc = SMC(1000, ESSResampler(0.3), PMMH(20), KF())
-sample = run_smc(rng, model_builder, prior, smc, infl_data; ensemble=MCMCThreads());
+sample = run_smc(rng, model_builder, prior, smc, gdp_data; ensemble=MCMCThreads());
 
 # return the weighted mean of the sample
 mean(sample)
