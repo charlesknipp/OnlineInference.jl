@@ -115,7 +115,7 @@ unpack(state::ModelState) = (state.model, state.params, state.sample)
 
 # this only collects the mean of the parameters, not the states
 function StatsBase.mean(
-    sample::ParticleDistribution{<:Real,<:Particle{PT}}
+    sample::ParticleDistribution{<:Number,<:Particle{PT}}
 ) where {PT<:ModelState}
     parameters = hcat(map(x -> x.state.params, sample.particles)...)
     return mean(parameters, StatsBase.weights(sample), 2)
