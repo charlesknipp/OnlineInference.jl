@@ -154,21 +154,26 @@ prior = product_distribution([
 fred_data = CSV.read("examples/trend-cycle-decomposition/data.csv", DataFrame)
 gdp_data = [[val] for val in fred_data.gdp][1:240]
 
-println("\n## SMC² ####################################\n")
+# set the algorithm configuraion
+smc = SMC(100, ESSResampler(0.3), PMMH(20), KF())
 
-# run SMC² with a Kalman filter and multithreaded PMMH rejuvenation
+println("\n## SAMPLER CONFIGURATION ####################\n")
+println("num particles: $(smc.N)")
+println("ess threshold: $(smc.resampler.threshold)")
+println("PMCMC kernel:  $(smc.kernel.chain_length)")
+println("filter:        $(smc.filter)")
+
+println("\n## SMC² #####################################\n")
+
 rng = MersenneTwister(1234)
-smc = SMC(1000, ESSResampler(0.3), PMMH(20), KF())
 sample = run_smc(rng, model_builder, prior, smc, gdp_data; ensemble=MCMCThreads());
 
 println("\n")
 show_param_ests(sample)
 
-println("\n## JUMP STARTED SMC² #######################\n")
+println("\n## JUMP STARTED SMC² ########################\n")
 
-# run a batch tempered SMC to jump start SMC² with a higher ESS
 rng = MersenneTwister(1234)
-smc = SMC(1000, ESSResampler(0.4), PMMH(20), KF())
 sample = batch_tempered_smc(
     rng, model_builder, prior, smc, gdp_data[1:50]; ensemble=MCMCThreads()
 );
@@ -176,15 +181,16 @@ sample = batch_tempered_smc(
 println("")
 ssm_logdensity = StateSpaceLogDensity(model_builder, smc.filter, prior, gdp_data);
 for t in 51:lastindex(gdp_data)
-    sample = smc_iter(rng, ssm_logdensity, smc, t, sample, gdp_data[t]; ensemble=MCMCThreads())
+    global sample = smc_iter(
+        rng, ssm_logdensity, smc, t, sample, gdp_data[t]; ensemble=MCMCThreads()
+    )
 end
 
 println("\n")
 show_param_ests(sample)
 
-println("\n## BATCHED SMC #############################\n")
+println("\n## BATCHED SMC ##############################\n")
 
-# for optimal stability run a batch tempered SMC for the entire data
 rng = MersenneTwister(1234)
 sample = batch_tempered_smc(
     rng, model_builder, prior, smc, gdp_data; ensemble=MCMCThreads()
