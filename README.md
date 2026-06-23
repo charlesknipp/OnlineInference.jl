@@ -15,9 +15,13 @@ smc_algo = SMC(
 
 where the filter must be compatible with the generated state space model. For example, one cannot run a nonlinear model with a Kalman filter. 
 
+## Rejuvenation
+
 When running the algorithm online, you can pass additional key word arguments like `ensemble` which determines whether to parallelize the rejuventation/resampling step via `MCMCThreads()` or `MCMCDistributed()`. Feel free to play around with various configurations to ensure parallel processes provide ample speedup.
 
-For rejuvenation, the only working algorithm is metropolis hastings, however I seek to get Hamiltonian Monte Carlo operational for future iterations.
+Currently, the only working algorithm is metropolis hastings; however I seek to get Hamiltonian Monte Carlo operational for future iterations.
+
+Under the hood, I use `Bijectors.jl` to perform MCMC on the unconstrained parameter space to then project back into the original space. This transformation ensures that some parameter in a compact subspace of $\mathbb{R}^{n}$ can move freely in rejuvenation when proposals push parameters outside the support of the prior.
 
 ## Examples
 
