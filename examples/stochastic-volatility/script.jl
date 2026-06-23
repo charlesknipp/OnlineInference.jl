@@ -57,6 +57,8 @@ function GF.calc_R(::SimpleObservation, ::Integer; new_outer, kwargs...)
     return PDMat(SMatrix{1,1}(exp(new_outer[2])))
 end
 
+## STATE SPACE MODEL #######################################################################
+
 function UCSV(γ::T) where {T<:Real}
     stoch_vol_prior = GF.HomogeneousGaussianPrior(
         zeros(SVector{2,T}), PDMat(10 * SMatrix{2,2,T}(I))
@@ -78,6 +80,7 @@ end
 ## MAIN ####################################################################################
 
 prior = MvLogNormal(1.0I(1))
+
 fred_data = CSV.read("examples/stochastic-volatility/data.csv", DataFrame)
 infl_data = [[val] for val in fred_data.value]
 
